@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"os"
@@ -31,6 +32,15 @@ const (
 	snakeBody     = "██" // 使用两个实心方块
 	food          = "★ " // 食物后面加空格对齐
 )
+
+// 清屏并将光标移动到左上角
+const clearScreen = "\033[2J\033[H"
+
+// 隐藏光标
+const hideCursor = "\033[?25l"
+
+// 显示光标
+const showCursor = "\033[?25h"
 
 // GameConfig 游戏配置结构体
 type GameConfig struct {
@@ -230,6 +240,27 @@ func (g *Game) restart() {
 
 // draw 绘制游戏界面
 func (g *Game) draw() {
+	var buffer bytes.Buffer
+
+	// 清屏并隐藏光标
+	buffer.WriteString(clearScreen)
+	buffer.WriteString(hideCursor)
+
+	// 打印游戏信息
+	buffer.WriteString(fmt.Sprintf("分数: %d    难度: %s    大小: %dx%d\n",
+		g.score,
+		getDifficultyName(g.config.difficulty),
+		g.config.width,
+		g.config.height,
+	))
+
+	// 打印上边界
+	buffer.WriteString("┌")
+	for i := 0; i < g.config.width*2; i++ {
+		buffer.WriteString("─")
+	}
+	buffer.WriteString("┐\n")
+
 	// 清空游戏板
 	for i := range g.board {
 		for j := range g.board[i] {
@@ -247,48 +278,31 @@ func (g *Game) draw() {
 	// 绘制食物
 	g.board[g.food.y][g.food.x] = food
 
-	// 清屏
-	cmd := exec.Command("clear")
-	cmd.Stdout = os.Stdout
-	cmd.Run()
-
-	// 打印游戏信息
-	fmt.Printf("分数: %d    难度: %s    大小: %dx%d\n",
-		g.score,
-		getDifficultyName(g.config.difficulty),
-		g.config.width,
-		g.config.height,
-	)
-
-	// 打印上边界
-	fmt.Print("┌")
-	for i := 0; i < g.config.width*2; i++ {
-		fmt.Print("─")
-	}
-	fmt.Println("┐")
-
 	// 打印游戏主体区域
 	for _, row := range g.board {
-		fmt.Print("│") // 左边界
+		buffer.WriteString("│") // 左边界
 		for _, cell := range row {
-			fmt.Print(cell)
+			buffer.WriteString(cell)
 		}
-		fmt.Println("│") // 右边界
+		buffer.WriteString("│\n") // 右边界
 	}
 
 	// 打印下边界
-	fmt.Print("└")
+	buffer.WriteString("└")
 	for i := 0; i < g.config.width*2; i++ {
-		fmt.Print("─")
+		buffer.WriteString("─")
 	}
-	fmt.Println("┘")
+	buffer.WriteString("┘\n")
 
 	// 如果游戏结束，显示最终得分和重新开始选项
 	if g.gameOver {
-		fmt.Println("游戏结束! 最终得分:", g.score)
-		fmt.Println("\n按 'r' 重新开始游戏")
-		fmt.Println("按 'q' 或 'ESC' 退出游戏")
+		buffer.WriteString(fmt.Sprintf("游戏结束! 最终得分: %d\n", g.score))
+		buffer.WriteString("\n按 'r' 重新开始游戏\n")
+		buffer.WriteString("按 'q' 或 'ESC' 退出游戏\n")
 	}
+
+	// 一次性输出所有内容
+	fmt.Print(buffer.String())
 }
 
 // getDifficultyName 获取难度名称
@@ -309,6 +323,10 @@ func main() {
 	// 获取游戏配置
 	config := getGameConfig()
 
+	// 设置终端
+	fmt.Print(hideCursor)       // 隐藏光标
+	defer fmt.Print(showCursor) // 确保退出时显示光标
+
 	fmt.Println("游戏控制:")
 	fmt.Println("W: 向上移动")
 	fmt.Println("S: 向下移动")
@@ -317,7 +335,7 @@ func main() {
 	fmt.Println("R: 重新开始游戏")
 	fmt.Println("Q/ESC: 退出游戏")
 	fmt.Println("\n准备开始游戏...")
-	time.Sleep(2 * time.Second) // 给玩家时间阅读说明
+	time.Sleep(2 * time.Second)
 
 	// 初始化键盘
 	if err := keyboard.Open(); err != nil {
