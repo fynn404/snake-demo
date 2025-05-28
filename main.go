@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/eiannone/keyboard" // 用于处理键盘输入
@@ -25,9 +27,9 @@ const (
 	maxWidth      = 40
 	minHeight     = 8
 	maxHeight     = 20
-	emptyCell     = " "
-	snakeBody     = "◼"
-	food          = "★"
+	emptyCell     = "  " // 改为两个空格
+	snakeBody     = "██" // 使用两个实心方块
+	food          = "★ " // 食物后面加空格对齐
 )
 
 // GameConfig 游戏配置结构体
@@ -55,20 +57,28 @@ type Game struct {
 
 // 获取用户输入的数字
 func getNumericInput(prompt string, min, max int) int {
-	var input int
+	var input string
 	for {
 		fmt.Print(prompt)
-		_, err := fmt.Scanf("%d\n", &input)
+		fmt.Scanln(&input)
+
+		// 检查是否要退出
+		input = strings.TrimSpace(input)
+		if input == "q" || input == "Q" {
+			fmt.Println("\n已退出游戏!")
+			os.Exit(0)
+		}
+
+		// 尝试转换为数字
+		num, err := strconv.Atoi(input)
 		if err != nil {
-			// 清除输入缓冲
-			fmt.Scanln()
-			fmt.Printf("输入无效，请输入一个介于 %d 和 %d 之间的数字\n", min, max)
+			fmt.Printf("输入无效，请输入一个介于 %d 和 %d 之间的数字，或输入 'q' 退出\n", min, max)
 			continue
 		}
-		if input >= min && input <= max {
-			return input
+		if num >= min && num <= max {
+			return num
 		}
-		fmt.Printf("请输入一个介于 %d 和 %d 之间的数字\n", min, max)
+		fmt.Printf("请输入一个介于 %d 和 %d 之间的数字，或输入 'q' 退出\n", min, max)
 	}
 }
 
@@ -82,12 +92,17 @@ func getGameConfig() GameConfig {
 	cmd.Run()
 
 	fmt.Println("=== 欢迎来到贪吃蛇游戏! ===")
+	fmt.Println("\n【操作说明】")
+	fmt.Println("- 在选择界面: 输入 'q' 退出游戏")
+	fmt.Println("- 在游戏中: 按 'q' 或 'ESC' 退出游戏")
+	fmt.Println("- WASD: 控制蛇的移动方向")
+
 	fmt.Println("\n【难度选择】")
 	fmt.Println("1 = 简单 (蛇移动较慢)")
 	fmt.Println("2 = 普通 (蛇移动适中)")
 	fmt.Println("3 = 困难 (蛇移动较快)")
 
-	difficulty := getNumericInput("\n请选择难度 (1-3): ", 1, 3)
+	difficulty := getNumericInput("\n请选择难度 (1-3，或 'q' 退出): ", 1, 3)
 	switch difficulty {
 	case 1:
 		config.difficulty = time.Duration(DifficultyEasy) * time.Millisecond
@@ -101,10 +116,10 @@ func getGameConfig() GameConfig {
 	}
 
 	fmt.Println("\n【画面设置】")
-	config.width = getNumericInput(fmt.Sprintf("请设置宽度 (%d-%d): ", minWidth, maxWidth), minWidth, maxWidth)
+	config.width = getNumericInput(fmt.Sprintf("请设置宽度 (%d-%d，或 'q' 退出): ", minWidth, maxWidth), minWidth, maxWidth)
 	fmt.Printf("宽度已设置为: %d\n", config.width)
 
-	config.height = getNumericInput(fmt.Sprintf("请设置高度 (%d-%d): ", minHeight, maxHeight), minHeight, maxHeight)
+	config.height = getNumericInput(fmt.Sprintf("请设置高度 (%d-%d，或 'q' 退出): ", minHeight, maxHeight), minHeight, maxHeight)
 	fmt.Printf("高度已设置为: %d\n", config.height)
 
 	fmt.Println("\n游戏即将开始...")
@@ -202,6 +217,17 @@ func (g *Game) update() {
 	}
 }
 
+// restart 重新开始游戏
+func (g *Game) restart() {
+	g.snake = []Point{
+		{x: g.config.width / 2, y: g.config.height / 2}, // 蛇初始位置在屏幕中央
+	}
+	g.direction = Point{x: 1, y: 0} // 初始移动方向向右
+	g.score = 0                     // 重置分数
+	g.gameOver = false              // 重置游戏状态
+	g.generateFood()                // 生成新的食物
+}
+
 // draw 绘制游戏界面
 func (g *Game) draw() {
 	// 清空游戏板
@@ -235,29 +261,33 @@ func (g *Game) draw() {
 	)
 
 	// 打印上边界
-	for i := 0; i < g.config.width+2; i++ {
-		fmt.Print("-")
+	fmt.Print("┌")
+	for i := 0; i < g.config.width*2; i++ {
+		fmt.Print("─")
 	}
-	fmt.Println()
+	fmt.Println("┐")
 
 	// 打印游戏主体区域
 	for _, row := range g.board {
-		fmt.Print("|") // 左边界
+		fmt.Print("│") // 左边界
 		for _, cell := range row {
 			fmt.Print(cell)
 		}
-		fmt.Println("|") // 右边界
+		fmt.Println("│") // 右边界
 	}
 
 	// 打印下边界
-	for i := 0; i < g.config.width+2; i++ {
-		fmt.Print("-")
+	fmt.Print("└")
+	for i := 0; i < g.config.width*2; i++ {
+		fmt.Print("─")
 	}
-	fmt.Println()
+	fmt.Println("┘")
 
-	// 如果游戏结束，显示最终得分
+	// 如果游戏结束，显示最终得分和重新开始选项
 	if g.gameOver {
 		fmt.Println("游戏结束! 最终得分:", g.score)
+		fmt.Println("\n按 'r' 重新开始游戏")
+		fmt.Println("按 'q' 或 'ESC' 退出游戏")
 	}
 }
 
@@ -284,6 +314,7 @@ func main() {
 	fmt.Println("S: 向下移动")
 	fmt.Println("A: 向左移动")
 	fmt.Println("D: 向右移动")
+	fmt.Println("R: 重新开始游戏")
 	fmt.Println("Q/ESC: 退出游戏")
 	fmt.Println("\n准备开始游戏...")
 	time.Sleep(2 * time.Second) // 给玩家时间阅读说明
@@ -331,15 +362,17 @@ func main() {
 				if game.direction.x != -1 {
 					game.direction = Point{x: 1, y: 0}
 				}
+			case 'r': // 重新开始游戏
+				if game.gameOver {
+					game.restart()
+				}
 			}
 		}
 	}()
 
 	// 主游戏循环
 	for range ticker.C {
-		if !game.gameOver {
-			game.update() // 更新游戏状态
-			game.draw()   // 绘制游戏界面
-		}
+		game.update() // 更新游戏状态
+		game.draw()   // 绘制游戏界面
 	}
 }
